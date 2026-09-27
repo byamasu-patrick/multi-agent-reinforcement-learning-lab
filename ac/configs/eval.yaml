@@ -1,0 +1,14 @@
+defaults:
+  - _self_
+  - override hydra/job_logging: file
+
+hydra:
+  run:
+    dir: evals/${random:4}
+  job:
+    chdir: True
+
+path: null
+load_step: null
+video_frames: 10000
+seed: null

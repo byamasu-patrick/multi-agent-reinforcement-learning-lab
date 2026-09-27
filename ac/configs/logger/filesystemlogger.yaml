@@ -1,0 +1,2 @@
+_target_: ac.utils.loggers.FileSystemLogger
+project_name: marl-lab-ac

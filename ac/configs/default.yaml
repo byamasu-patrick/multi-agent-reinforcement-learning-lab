@@ -1,0 +1,34 @@
+defaults:
+  - _self_
+  - logger: filesystemlogger
+  - override hydra/job_logging: file
+
+hydra:
+  run:
+    dir: outputs/${path_safe:${env.name}}/${algorithm.name}/${random:4}
+  sweep:
+    # the sweep dir is resolved before an algorithm is chosen, so the algorithm name goes in the per-job subdir
+    dir: multirun/${path_safe:${env.name}}/${now:%Y-%m-%d_%H-%M-%S}
+    subdir: ${algorithm.name}/seed${seed}_${hydra.job.num}
+  job:
+    chdir: True
+
+seed: null
+
+algorithm:
+  total_steps: 100_000
+  log_interval: 10_000
+  save_interval: False
+  eval_interval: 10_000
+  eval_episodes: 100
+  video_interval: False
+  video_frames: 500
+
+env:
+  _target_: ac.utils.envs.make_env
+  name : ???
+  time_limit : ???
+  clear_info: False
+  observe_id: False
+  standardise_rewards: False
+  wrappers : null
