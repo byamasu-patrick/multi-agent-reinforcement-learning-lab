@@ -63,7 +63,7 @@ Defecting pays more whatever the other agent does ($5 > 3$ and $1 > 0$), so **(D
 
 The training schedule, applied at step $t$ out of $T_{\max}$ total steps, is
 
-$$\epsilon_t = 1 - 0.99 \cdot \min\left(1, \frac{t}{0.8\, T_{\max}}\right)$$
+$$\epsilon_t = 1 - 0.99 \cdot \min\left(1, \frac{t}{0.8 T_{\max}}\right)$$
 
 ## Results
 
@@ -102,7 +102,7 @@ Figure 1 barely moves, but the Q-values change a lot during training. This is th
 
 While the opponent explores with rate $\epsilon$, it defects with probability $1 - \epsilon/2$. Against that opponent, the expected reward of each action is
 
-$$Q(C) = 3 \cdot \frac{\epsilon}{2} = 1.5\,\epsilon \qquad Q(D) = 5 \cdot \frac{\epsilon}{2} + 1 \cdot \left(1 - \frac{\epsilon}{2}\right) = 1 + 2\epsilon$$
+$$Q(C) = 3 \cdot \frac{\epsilon}{2} = 1.5 \epsilon \qquad Q(D) = 5 \cdot \frac{\epsilon}{2} + 1 \cdot \left(1 - \frac{\epsilon}{2}\right) = 1 + 2\epsilon$$
 
 The curves follow these targets as $\epsilon$ decays:
 
@@ -112,7 +112,7 @@ The curves follow these targets as $\epsilon$ decays:
 | Evaluation 20 (episode 8,400) | $\approx 0.48$ | 0.72 | 1.96 | $Q(C) \approx$ 0.9–1.0, $Q(D) \approx$ 2.0 |
 | From about evaluation 38 (episode ~15,600) | $0.01$ | 0.015 | 1.02 | $Q(C) \approx$ 0.05, $Q(D) \approx$ 1.0 |
 
-- **$Q(D)$ stays above $Q(C)$ throughout**, since $1 + 2\epsilon > 1.5\,\epsilon$ for every $\epsilon$. This is why the greedy policy, and so Figure 1, is "defect" from the first evaluation onwards.
+- **$Q(D)$ stays above $Q(C)$ throughout**, since $1 + 2\epsilon > 1.5 \epsilon$ for every $\epsilon$. This is why the greedy policy, and so Figure 1, is "defect" from the first evaluation onwards.
 - **$Q(D)$ levels off at 1** once $\epsilon$ reaches its minimum of $0.01$ at episode 16,000 (80% of training).
 - **$Q(C)$ ends slightly above its target** (0.05 rather than 0.015). Once the agents act greedily, cooperation is only chosen during exploration, so $Q(C)$ gets few updates and lags behind.
 - **The early curves are noisy** because $\alpha = 0.05$ is constant and the opponent's actions are close to random, so each update moves the estimate towards a very different reward (0, 1, 3 or 5).

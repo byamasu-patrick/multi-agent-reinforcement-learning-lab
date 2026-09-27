@@ -60,4 +60,7 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
+    from hf_jobs import launch
+
+    launch()  # with --hf-job, submits this run to Hugging Face Jobs and exits; strips --hf-* before Hydra sees them
     main()

@@ -10,6 +10,7 @@ A standalone package of four multi-agent actor-critic algorithms, implemented in
 - [Training](#training)
 - [Outputs](#outputs)
 - [Recording a trained agent](#recording-a-trained-agent)
+- [Running on Hugging Face Jobs](#running-on-hugging-face-jobs)
 - [Configuration reference](#configuration-reference)
 - [Code map](#code-map)
 - [Changes from the MARL book codebase](#changes-from-the-marl-book-codebase)
@@ -41,7 +42,7 @@ Each training iteration in [`train.py`](train.py) does two things:
 
 For each agent $i$, the critic target is the $n$-step return (default $n = 5$). It bootstraps from a **target critic** $V_{\bar\phi_i}$, a periodically copied version of the critic:
 
-$$G_{i,t}^{(n)} = \sum_{k=0}^{n-1} \gamma^k \, r_{i,t+k} + \gamma^n \, V_{\bar\phi_i}(s_{t+n})$$
+$$G_{i,t}^{(n)} = \sum_{k=0}^{n-1} \gamma^k r_{i,t+k} + \gamma^n V_{\bar\phi_i}(s_{t+n})$$
 
 Terms after the end of an episode are masked to zero. The advantage is
 
@@ -51,7 +52,7 @@ where $s_t$ is $o_{i,t}$ for a decentralised critic and $(o_{1,t}, \dots, o_{N,t
 
 ### A2C loss (IA2C, MAA2C)
 
-$$\mathcal{L} = \underbrace{\sum_i \Big( -\log \pi_{\theta_i}(a_{i,t} \mid o_{i,t}) \, A_{i,t} \Big) - \beta \sum_i \mathcal{H}\big(\pi_{\theta_i}(\cdot \mid o_{i,t})\big)}_{\text{actor loss}} + c_v \underbrace{\sum_i A_{i,t}^2}_{\text{value loss}}$$
+$$\mathcal{L} = \underbrace{\sum_i \Big( -\log \pi_{\theta_i}(a_{i,t} \mid o_{i,t}) A_{i,t} \Big) - \beta \sum_i \mathcal{H}\big(\pi_{\theta_i}(\cdot \mid o_{i,t})\big)}_{\text{actor loss}} + c_v \underbrace{\sum_i A_{i,t}^2}_{\text{value loss}}$$
 
 The advantage is detached in the actor loss, so the actor's gradient does not flow into the critic. $\beta$ is `entropy_coef`, which rewards exploration, and $c_v$ is `value_loss_coef`. All losses are averaged over the valid (non-padded) time steps, and one gradient step is taken per batch.
 
@@ -63,7 +64,7 @@ $$\rho_{i,t} = \frac{\pi_{\theta_i}(a_{i,t} \mid o_{i,t})}{\pi_{\theta_i^{\text{
 
 and replaces the A2C policy term with the clipped objective
 
-$$-\min\Big( \rho_{i,t} A_{i,t}, \; \operatorname{clip}(\rho_{i,t}, 1 - \epsilon, 1 + \epsilon) \, A_{i,t} \Big)$$
+$$-\min\Big( \rho_{i,t} A_{i,t}, \quad \text{clip}(\rho_{i,t}, 1 - \epsilon, 1 + \epsilon) A_{i,t} \Big)$$
 
 where $\epsilon$ is `ppo_clip`. Clipping stops a single batch from moving the policy too far. That makes reusing the batch for several epochs safe.
 
@@ -177,6 +178,93 @@ python evaluate.py path=outputs/lbforaging_Foraging-8x8-2p-3f-v3/mappo/<run-id> 
 
 This loads the latest checkpoint and writes `evals/<id>/eval.mp4`. To load a specific checkpoint, use `load_step=<step>`. LBF opens a small render window while it records.
 
+## Running on Hugging Face Jobs
+
+Any training command can run on [Hugging Face Jobs](https://huggingface.co/docs/huggingface_hub/guides/jobs) instead of this machine by adding `--hf-job`. This uses [`hf-jobs-launch`](https://github.com/byamasu-patrick/rl-algorithms-lab/tree/master/hf-training-jobs), the same launcher as the CleanRL implementations in `rl-algorithms-lab`. It is installed by `requirements.txt`.
+
+You need a Hugging Face account that can run Jobs (a PRO account, or an organisation with Jobs enabled). Log in once:
+
+```powershell
+hf auth login
+```
+
+Then add `--hf-job` anywhere in the command:
+
+```powershell
+python run.py +algorithm=mappo env.name="lbforaging:Foraging-8x8-2p-3f-v3" env.time_limit=25 algorithm.total_steps=1_000_000 seed=0 --hf-job
+```
+
+The command uploads the code, submits the Job, prints its URL and exits. `run.py` calls `launch()` before Hydra reads the command line, and `launch()` removes every `--hf-*` flag, so Hydra never sees them. A flag's position doesn't matter. `--hf-job` only consumes the next argument when that argument is `true`, `false`, `yes`, `no`, `on` or `off`, so a Hydra override after it is left alone.
+
+To preview everything without uploading or submitting anything, add `--hf-dry-run`. It prints the files to upload, the secrets passed and the script the Job will run.
+
+### What happens
+
+1. **Upload.** The `ac/` folder is uploaded to your private bucket `<namespace>/hf-training-jobs`, in a new subfolder per run. `.venv/`, `__pycache__/`, `outputs/`, `multirun/` and `evals/` are skipped, leaving 28 source files.
+2. **Install.** The Job starts from `python:3.12`. It installs the CPU build of torch 2.4.1, then `requirements.txt`.
+3. **Run.** The Job runs your command without the `--hf-*` flags, from `/workspace/ac`. Hydra writes to `outputs/` as it does locally.
+4. **Copy back.** When training ends, whether or not it succeeded, `outputs/` and `multirun/` are copied to `<run-id>/outputs/` in the bucket.
+
+To download the results:
+
+```powershell
+hf buckets ls <namespace>/hf-training-jobs
+hf buckets sync hf://buckets/<namespace>/hf-training-jobs/<run-id>/outputs ./hf-results
+```
+
+A single run lands in `hf-results/outputs/<env>/<algorithm>/<id>/`, with the same `results.csv`, `config.yaml` and checkpoints as a local run. `evaluate.py` can then record a video from that folder locally.
+
+To follow a Job:
+
+```powershell
+hf jobs ps
+hf jobs logs <job-id>
+hf jobs cancel <job-id>
+```
+
+Add `--hf-follow` to the submit command to stream the logs until the Job ends.
+
+### Defaults and overrides
+
+The Job settings live in `[tool.hf-jobs]` in [`pyproject.toml`](pyproject.toml):
+
+| Setting | Value | Why |
+|---|---|---|
+| `flavor` | `cpu-upgrade` | The networks are small MLPs and the 10 parallel environments are CPU processes, so a GPU doesn't help. `cpu-upgrade` has 8 vCPUs; `cpu-basic` has 2. |
+| `timeout` | `6h` | The Hugging Face default of 30 minutes is too short for runs of a million steps or more. |
+| `image` | `python:3.12` | torch 2.4.1 and pandas 2.2.2 have no wheels for newer Python versions. |
+| `install` | CPU torch, then `requirements.txt` | Avoids downloading the ~3 GB CUDA build of torch onto a CPU machine. |
+| `namespace` | not set | Jobs run and are billed under your own account. |
+
+Override any of them per run with a flag (`--hf-flavor`, `--hf-timeout`, `--hf-image`, `--hf-namespace`), or with an environment variable (`HF_JOBS_FLAVOR`, `HF_JOBS_INSTALL`, ...). For example, to bill an organisation and run on the smaller machine:
+
+```powershell
+python run.py +algorithm=ia2c env.name="lbforaging:Foraging-8x8-2p-3f-v3" env.time_limit=25 --hf-job --hf-namespace my-org --hf-flavor cpu-basic
+```
+
+### Sweeps
+
+A multirun (`-m`) runs every combination one after another inside **one** Job, and the whole sweep comes back as one `multirun/` folder:
+
+```powershell
+python run.py -m +algorithm=ia2c,maa2c,ippo,mappo seed=0,1,2 env.name="lbforaging:Foraging-8x8-2p-3f-v3" env.time_limit=25 --hf-job --hf-timeout 24h
+```
+
+To run combinations in parallel instead, submit one Job per combination:
+
+```powershell
+foreach ($algo in 'ia2c','maa2c','ippo','mappo') { foreach ($seed in 0,1,2) {
+    python run.py +algorithm=$algo seed=$seed env.name="lbforaging:Foraging-8x8-2p-3f-v3" env.time_limit=25 --hf-job
+} }
+```
+
+Each Job is billed separately, per minute, to the namespace it runs under.
+
+### Things that don't work in a Job
+
+- **Training videos:** `algorithm.video_interval` needs a display for LBF's OpenGL renderer, and Jobs have none. Keep it at its default, `False`, and record videos locally with `evaluate.py`.
+- **Weights & Biases logging:** `logger=wandb` needs `wandb` added to `requirements.txt`. Your W&B key is passed to the Job as a secret automatically if you've run `wandb login` locally.
+
 ## Configuration reference
 
 Defaults live in [`configs/default.yaml`](configs/default.yaml), with algorithm settings in [`configs/algorithm/`](configs/algorithm/). The four algorithm files are identical apart from `name`, the model class and `critic.centralised`.
@@ -212,7 +300,8 @@ To log to Weights & Biases instead of CSV, add `logger=wandb`. This needs `pip i
 
 ```text
 ac/
-├── run.py                # entry point: builds envs and logger, then calls the algorithm's train.main
+├── run.py                # entry point: --hf-job hand-off, then builds envs and logger and calls train.main
+├── pyproject.toml        # Hugging Face Jobs settings only ([tool.hf-jobs])
 ├── evaluate.py           # entry point: loads a run's config and checkpoint, then calls eval.main
 ├── train.py              # training loop: _collect_trajectories() -> model.update() -> logging
 ├── eval.py               # rebuilds the model from a checkpoint and records a video
@@ -249,6 +338,8 @@ The algorithm code in `train.py`, `model.py` and `utils/` (models, returns, stan
   - `torch` 2.4.0 → 2.4.1, because 2.4.0 fails to load `fbgemm.dll` on Windows.
   - `hydra-ax-sweeper` removed, because it crashes Hydra's plugin loading on Python 3.11+.
   - `lbforaging==2.0.0` added.
+  - `click==8.1.7` removed. `ac` never imports click, and `huggingface_hub` 2.x needs `click>=8.4.2`.
+  - `hf-jobs-launch` added, for [running on Hugging Face Jobs](#running-on-hugging-face-jobs).
 
 ## References
 

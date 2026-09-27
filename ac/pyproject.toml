@@ -1,0 +1,17 @@
+# Only used for Hugging Face Jobs settings; dependencies are in requirements.txt.
+
+[tool.hf-jobs]
+# Defaults for `python run.py ... --hf-job`; each can be overridden with the matching --hf-* flag
+# or HF_JOBS_* environment variable. namespace defaults to your own account; set it to bill an org.
+# The networks are small MLPs and the 10 parallel environments are CPU processes, so a GPU does not
+# help; cpu-upgrade has 8 vCPUs where cpu-basic has 2.
+flavor = "cpu-upgrade"
+timeout = "6h"
+# torch==2.4.1 and pandas==2.2.2 have no wheels past Python 3.12.
+image = "python:3.12"
+# Install the CPU build of torch first; pip then treats torch==2.4.1 in requirements.txt as satisfied
+# instead of downloading the ~3 GB CUDA build. For a GPU flavor, override with
+# HF_JOBS_INSTALL="pip install --no-cache-dir -r requirements.txt".
+install = "pip install --no-cache-dir torch==2.4.1 --index-url https://download.pytorch.org/whl/cpu && pip install --no-cache-dir -r requirements.txt"
+# outputs/ and multirun/ (Hydra's run folders) are copied back by default.
+exclude = ["evals"]
