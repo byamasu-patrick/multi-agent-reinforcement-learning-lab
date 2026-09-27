@@ -92,6 +92,32 @@ Final Q-tables:
 
   with standard deviation $\sigma \approx 0.64$. This matches the observed 1.02–1.15 ± 0.46–0.82. The wide bands and the small differences between evaluations come from this exploration noise, not from instability in learning.
 
+### Q-value convergence
+
+![Q-value convergence of both agents](figures/Figure_2.png)
+
+*Figure 2: Q-values over the 49 evaluations. Top row: agent 1's $Q(a_0)$ (C) and $Q(a_1)$ (D). Bottom row: agent 2's $Q(b_0)$ (C) and $Q(b_1)$ (D). The red dashed line is the highest reward that action can earn against any opponent action (3 for C, 5 for D).*
+
+Figure 1 barely moves, but the Q-values change a lot during training. This is the non-stationarity described above: each agent's Q-values follow the other agent's changing policy.
+
+While the opponent explores with rate $\epsilon$, it defects with probability $1 - \epsilon/2$. Against that opponent, the expected reward of each action is
+
+$$Q(C) = 3 \cdot \frac{\epsilon}{2} = 1.5\,\epsilon \qquad Q(D) = 5 \cdot \frac{\epsilon}{2} + 1 \cdot \left(1 - \frac{\epsilon}{2}\right) = 1 + 2\epsilon$$
+
+The curves follow these targets as $\epsilon$ decays:
+
+| Stage | $\epsilon$ | Target $Q(C)$ | Target $Q(D)$ | Observed |
+|---|---|---|---|---|
+| Start (uniformly random opponent) | $\approx 1$ | 1.5 | 3.0 | $Q(C) \approx$ 1.2–1.5, $Q(D) \approx$ 2.7–3.0 |
+| Evaluation 20 (episode 8,400) | $\approx 0.48$ | 0.72 | 1.96 | $Q(C) \approx$ 0.9–1.0, $Q(D) \approx$ 2.0 |
+| From about evaluation 38 (episode ~15,600) | $0.01$ | 0.015 | 1.02 | $Q(C) \approx$ 0.05, $Q(D) \approx$ 1.0 |
+
+- **$Q(D)$ stays above $Q(C)$ throughout**, since $1 + 2\epsilon > 1.5\,\epsilon$ for every $\epsilon$. This is why the greedy policy, and so Figure 1, is "defect" from the first evaluation onwards.
+- **$Q(D)$ levels off at 1** once $\epsilon$ reaches its minimum of $0.01$ at episode 16,000 (80% of training).
+- **$Q(C)$ ends slightly above its target** (0.05 rather than 0.015). Once the agents act greedily, cooperation is only chosen during exploration, so $Q(C)$ gets few updates and lags behind.
+- **The early curves are noisy** because $\alpha = 0.05$ is constant and the opponent's actions are close to random, so each update moves the estimate towards a very different reward (0, 1, 3 or 5).
+- **No Q-value reaches the red line.** The red line is only reachable if the opponent always cooperates, which never happens here.
+
 ## Running
 
 ```bash
